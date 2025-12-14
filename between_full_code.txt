@@ -1,0 +1,1021 @@
+--- src/components/screens/ResultScreen.tsx ---
+import React from "react";
+import { RotateCcw, Home } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { GameState, UIMode } from "@/types";
+
+interface ResultScreenProps {
+  gameState: GameState;
+  uiMode: UIMode;
+  onRetry: () => void;
+  onHome: () => void;
+}
+
+export const ResultScreen: React.FC<ResultScreenProps> = ({
+  gameState,
+  uiMode,
+  onRetry,
+  onHome,
+}) => {
+  const isRugged = uiMode === "RUGGED";
+
+  const containerStyle = isRugged
+    ? "bg-white text-black font-mono selection:bg-black selection:text-white"
+    : "bg-gradient-to-br from-indigo-900 via-purple-900 to-black text-white font-sans";
+
+  const buttonStyle = isRugged
+    ? "border-2 border-black px-4 py-2 hover:bg-black hover:text-white transition-colors uppercase font-bold text-sm"
+    : "bg-white/20 hover:bg-white/30 px-6 py-3 rounded-full font-bold backdrop-blur text-sm transition-transform active:scale-95";
+
+  return (
+    <div
+      className={cn(
+        "min-h-screen flex flex-col items-center justify-center p-8 text-center",
+        containerStyle
+      )}
+    >
+      <div className="animate-in slide-in-from-bottom-10 fade-in duration-500 space-y-8">
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold opacity-60">FINISHED</h2>
+          <div className="text-8xl font-black tracking-tighter">
+            {gameState.score}
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "p-6 max-w-xs mx-auto",
+            isRugged ? "bg-gray-100" : "bg-white/10 rounded-xl"
+          )}
+        >
+          <div className="flex justify-between text-sm font-bold mb-2">
+            <span>DIFFICULTY</span>
+            <span>{gameState.difficulty}</span>
+          </div>
+          <div className="flex justify-between text-sm font-bold">
+            <span>HIGH SCORE</span>
+            <span>{Math.max(gameState.score, gameState.highScore)}</span>
+          </div>
+        </div>
+
+        <div className="flex gap-4 justify-center pt-8">
+          <button onClick={onHome} className={buttonStyle}>
+            <Home size={20} />
+          </button>
+          <button onClick={onRetry} className={buttonStyle}>
+            <RotateCcw size={20} /> RETRY
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+--- src/components/screens/GameScreen.tsx ---
+import React, { useState, useEffect } from "react";
+import { Mic, MicOff } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { GameConfig, GameState, FeedbackState } from "@/types";
+import { Keypad } from "@/components/ui/Keypad";
+import { NumberPanel } from "@/components/ui/NumberPanel";
+import { useVoiceInput } from "@/hooks/useVoiceInput";
+
+interface GameScreenProps {
+  config: GameConfig;
+  gameState: GameState;
+  feedback: FeedbackState | null;
+  onAnswer: (val: number) => void;
+  onPass: () => void;
+  onAbort: () => void;
+}
+
+export const GameScreen: React.FC<GameScreenProps> = ({
+  config,
+  gameState,
+  feedback,
+  onAnswer,
+  onPass,
+  onAbort,
+}) => {
+  const [inputBuffer, setInputBuffer] = useState("");
+  const isRugged = config.uiMode === "RUGGED";
+
+  // Voice Control
+  const { isListening, start: startMic } = useVoiceInput(
+    config.inputMode === "VOICE" && gameState.isPlaying,
+    (val) => {
+      if (val === "PASS") onPass();
+      else onAnswer(val);
+    }
+  );
+
+  // Initialize Mic
+  useEffect(() => {
+    if (config.inputMode === "VOICE" && gameState.isPlaying) {
+      startMic();
+    }
+  }, [config.inputMode, gameState.isPlaying, startMic]);
+
+  // Keypad Handlers
+  const handleKeypadInput = (char: string) => {
+    if (inputBuffer.length < 5) setInputBuffer((prev) => prev + char);
+  };
+  const handleKeypadEnter = () => {
+    if (inputBuffer) {
+      onAnswer(parseInt(inputBuffer));
+      setInputBuffer("");
+    }
+  };
+  const handleKeypadDelete = () => {
+    setInputBuffer((prev) => prev.slice(0, -1));
+  };
+
+  // Keyboard Event Listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!gameState.isPlaying || config.inputMode !== "KEYPAD") return;
+
+      if (e.key >= "0" && e.key <= "9") {
+        handleKeypadInput(e.key);
+      } else if (e.key === "Enter") {
+        handleKeypadEnter();
+      } else if (e.key === "Backspace") {
+        handleKeypadDelete();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [gameState.isPlaying, config.inputMode, inputBuffer]); // deps
+
+  const containerStyle = isRugged
+    ? "bg-white text-black font-mono selection:bg-black selection:text-white"
+    : "bg-gradient-to-br from-indigo-900 via-purple-900 to-black text-white font-sans";
+
+  return (
+    <div
+      className={cn(
+        "min-h-screen flex flex-col items-center justify-between p-4 sm:p-8",
+        containerStyle,
+        feedback?.type === "ng" && (isRugged ? "bg-red-100" : "bg-red-900/50")
+      )}
+    >
+      {/* Header */}
+      <div className="w-full max-w-lg flex justify-between items-end border-b-2 border-current pb-4 mb-4 opacity-80">
+        <div className="flex flex-col">
+          <span className="text-xs font-bold opacity-50">TIME</span>
+          <span
+            className={cn(
+              "text-4xl font-black tabular-nums leading-none",
+              gameState.timeLeft < 10 && "text-red-500 animate-pulse"
+            )}
+          >
+            {gameState.timeLeft}
+          </span>
+        </div>
+        <div className="flex flex-col items-end">
+          <span className="text-xs font-bold opacity-50">SCORE</span>
+          <span className="text-4xl font-black tabular-nums leading-none">
+            {gameState.score}
+          </span>
+        </div>
+      </div>
+
+      {/* Main Game Area */}
+      <div className="w-full max-w-lg flex-1 flex flex-col items-center justify-center relative">
+        <NumberPanel
+          a={gameState.targetA}
+          b={gameState.targetB}
+          uiMode={config.uiMode}
+        />
+
+        {/* Input Feedback / Buffer */}
+        <div className="h-20 flex items-center justify-center w-full mb-4">
+          {feedback ? (
+            <span
+              className={cn(
+                "text-5xl font-black animate-ping-once",
+                feedback.type === "ok"
+                  ? "text-green-500"
+                  : feedback.type === "ng"
+                  ? "text-red-500"
+                  : "text-blue-500"
+              )}
+            >
+              {feedback.msg}
+            </span>
+          ) : (
+            <span
+              className={cn(
+                "text-5xl font-black tracking-widest border-b-4",
+                inputBuffer
+                  ? "border-current opacity-100"
+                  : "border-transparent opacity-20"
+              )}
+            >
+              {inputBuffer || "?"}
+            </span>
+          )}
+        </div>
+
+        {/* Controls */}
+        <div className="w-full max-w-xs">
+          {config.inputMode === "KEYPAD" ? (
+            <Keypad
+              uiMode={config.uiMode}
+              onInput={handleKeypadInput}
+              onDelete={handleKeypadDelete}
+              onEnter={handleKeypadEnter}
+              onPass={onPass}
+              disabled={!!feedback}
+            />
+          ) : (
+            <div
+              className={cn(
+                "flex flex-col items-center justify-center p-8 rounded-2xl",
+                isListening
+                  ? isRugged
+                    ? "bg-red-100 text-red-600"
+                    : "bg-red-500/20 text-red-200 animate-pulse"
+                  : "opacity-50"
+              )}
+            >
+              {isListening ? <Mic size={48} /> : <MicOff size={48} />}
+              <span className="mt-4 font-bold text-sm tracking-widest">
+                {isListening ? "LISTENING..." : "PAUSED"}
+              </span>
+              <p className="mt-2 text-xs opacity-60">"パス" でスキップ</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <button
+        onClick={onAbort}
+        className="mt-8 text-xs font-bold opacity-30 hover:opacity-100 transition-opacity"
+      >
+        ABORT GAME
+      </button>
+
+      <style jsx global>{`
+        @keyframes ping-once {
+          0% {
+            transform: scale(0.8);
+            opacity: 0;
+          }
+          50% {
+            transform: scale(1.1);
+            opacity: 1;
+          }
+          100% {
+            transform: scale(1);
+            opacity: 0;
+          }
+        }
+        .animate-ping-once {
+          animation: ping-once 0.4s cubic-bezier(0, 0, 0.2, 1) forwards;
+        }
+      `}</style>
+    </div>
+  );
+};
+--- src/components/screens/HomeScreen.tsx ---
+import React from "react";
+import { Mic, Keyboard, Settings, Zap, Volume2, VolumeX } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { GameConfig, Difficulty } from "@/types";
+
+interface HomeScreenProps {
+  config: GameConfig;
+  setConfig: React.Dispatch<React.SetStateAction<GameConfig>>;
+  highScore: number;
+  onStart: () => void;
+}
+
+export const HomeScreen: React.FC<HomeScreenProps> = ({
+  config,
+  setConfig,
+  highScore,
+  onStart,
+}) => {
+  const isRugged = config.uiMode === "RUGGED";
+
+  return (
+    <div
+      className={cn(
+        "min-h-screen w-full flex flex-col items-center justify-center p-6 transition-colors duration-500",
+        isRugged
+          ? "bg-white text-black font-mono selection:bg-black selection:text-white"
+          : "bg-linear-to-br from-indigo-900 via-purple-900 to-black text-white font-sans"
+      )}
+    >
+      <div className="max-w-md w-full space-y-12">
+        {/* Title */}
+        <div className="text-center space-y-2">
+          <h1
+            className={cn(
+              "text-6xl font-black tracking-tighter",
+              !isRugged &&
+                "text-transparent bg-clip-text bg-linear-to-r from-cyan-400 to-purple-400"
+            )}
+          >
+            BETWEEN
+          </h1>
+          <p
+            className={cn(
+              "text-sm font-bold tracking-widest",
+              isRugged ? "text-gray-500" : "text-gray-400"
+            )}
+          >
+            INSTANT REFLEX GAME
+          </p>
+        </div>
+
+        {/* Settings Grid */}
+        <div
+          className={cn(
+            "grid grid-cols-2 gap-4",
+            !isRugged && "bg-black/20 p-6 rounded-2xl"
+          )}
+        >
+          {/* Difficulty */}
+          <div className="col-span-2 space-y-2">
+            <label className="text-xs font-bold opacity-60">DIFFICULTY</label>
+            <div className="flex gap-2">
+              {(["EASY", "NORMAL", "HARD"] as Difficulty[]).map((d) => (
+                <button
+                  key={d}
+                  onClick={() =>
+                    setConfig((prev) => ({ ...prev, difficulty: d }))
+                  }
+                  className={cn(
+                    "flex-1 py-3 text-xs font-bold transition-all",
+                    config.difficulty === d
+                      ? isRugged
+                        ? "bg-black text-white"
+                        : "bg-cyan-500 text-white shadow-lg shadow-cyan-500/30"
+                      : isRugged
+                      ? "bg-gray-100 text-gray-400"
+                      : "bg-white/5 text-gray-400",
+                    !isRugged && "rounded-lg"
+                  )}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Input Mode */}
+          <div className="col-span-2 space-y-2">
+            <label className="text-xs font-bold opacity-60">INPUT MODE</label>
+            <div className="flex gap-2">
+              <button
+                onClick={() =>
+                  setConfig((prev) => ({ ...prev, inputMode: "KEYPAD" }))
+                }
+                className={cn(
+                  "flex-1 py-3 flex items-center justify-center gap-2 text-xs font-bold transition-all",
+                  config.inputMode === "KEYPAD"
+                    ? isRugged
+                      ? "bg-black text-white"
+                      : "bg-purple-500 text-white shadow-lg"
+                    : isRugged
+                    ? "bg-gray-100 text-gray-400"
+                    : "bg-white/5 text-gray-400",
+                  !isRugged && "rounded-lg"
+                )}
+              >
+                <Keyboard size={16} /> KEYPAD
+              </button>
+              <button
+                onClick={() =>
+                  setConfig((prev) => ({ ...prev, inputMode: "VOICE" }))
+                }
+                className={cn(
+                  "flex-1 py-3 flex items-center justify-center gap-2 text-xs font-bold transition-all",
+                  config.inputMode === "VOICE"
+                    ? isRugged
+                      ? "bg-black text-white"
+                      : "bg-pink-500 text-white shadow-lg"
+                    : isRugged
+                    ? "bg-gray-100 text-gray-400"
+                    : "bg-white/5 text-gray-400",
+                  !isRugged && "rounded-lg"
+                )}
+              >
+                <Mic size={16} /> VOICE
+              </button>
+            </div>
+          </div>
+
+          {/* UI Toggle */}
+          <button
+            onClick={() =>
+              setConfig((prev) => ({
+                ...prev,
+                uiMode: prev.uiMode === "RUGGED" ? "LUXURY" : "RUGGED",
+              }))
+            }
+            className={cn(
+              "col-span-1 flex items-center justify-center gap-2 py-3 text-xs font-bold",
+              isRugged
+                ? "border-2 border-gray-200 text-gray-400"
+                : "bg-white/10 text-white rounded-lg"
+            )}
+          >
+            {isRugged ? <Settings size={14} /> : <Zap size={14} />}{" "}
+            {config.uiMode}
+          </button>
+
+          {/* Sound Toggle */}
+          <button
+            onClick={() =>
+              setConfig((prev) => ({
+                ...prev,
+                isSoundEnabled: !prev.isSoundEnabled,
+              }))
+            }
+            className={cn(
+              "col-span-1 flex items-center justify-center gap-2 py-3 text-xs font-bold",
+              isRugged
+                ? "border-2 border-gray-200 text-gray-400"
+                : "bg-white/10 text-white rounded-lg"
+            )}
+          >
+            {config.isSoundEnabled ? (
+              <Volume2 size={14} />
+            ) : (
+              <VolumeX size={14} />
+            )}{" "}
+            SOUND
+          </button>
+        </div>
+
+        {/* Start Button */}
+        <button
+          onClick={onStart}
+          className={cn(
+            "w-full py-6 text-2xl font-black tracking-widest transition-all hover:scale-[1.02] active:scale-95 shadow-xl",
+            isRugged
+              ? "bg-black text-white border-b-8 border-gray-800 active:border-b-0 active:translate-y-2"
+              : "bg-linear-to-r from-cyan-500 to-blue-600 text-white rounded-2xl shadow-cyan-500/50"
+          )}
+        >
+          START
+        </button>
+
+        <div className="text-center text-xs opacity-50">
+          High Score: {highScore}
+        </div>
+      </div>
+    </div>
+  );
+};
+--- src/components/ui/Keypad.tsx ---
+import React from "react";
+import { cn } from "@/lib/utils";
+import { UIMode } from "@/types";
+
+interface KeypadProps {
+  onInput: (char: string) => void;
+  onDelete: () => void;
+  onEnter: () => void;
+  onPass: () => void;
+  disabled: boolean;
+  uiMode: UIMode;
+}
+
+export const Keypad: React.FC<KeypadProps> = ({
+  onInput,
+  onDelete,
+  onEnter,
+  onPass,
+  disabled,
+  uiMode,
+}) => {
+  const keys = ["7", "8", "9", "4", "5", "6", "1", "2", "3", "0"];
+  const isRugged = uiMode === "RUGGED";
+
+  const baseClass = isRugged
+    ? "bg-gray-200 text-black border-b-4 border-gray-400 hover:bg-gray-300 active:border-b-0 active:translate-y-1"
+    : "bg-white/10 backdrop-blur-md border border-white/20 text-white shadow-lg hover:bg-white/20 active:scale-95";
+
+  return (
+    <div className="grid grid-cols-3 gap-2 w-full max-w-xs mx-auto mt-4">
+      {keys.map((k) => (
+        <button
+          key={k}
+          disabled={disabled}
+          onClick={() => onInput(k)}
+          className={cn(
+            "h-16 text-2xl font-bold rounded-xl transition-all",
+            baseClass,
+            k === "0" && "col-span-1"
+          )}
+        >
+          {k}
+        </button>
+      ))}
+      <button
+        onClick={onDelete}
+        className={cn(
+          "h-16 text-xl font-bold rounded-xl transition-all text-red-500",
+          baseClass.replace("text-white", "")
+        )}
+      >
+        DEL
+      </button>
+      <button
+        onClick={onEnter}
+        className={cn(
+          "h-16 col-span-1 text-xl font-bold rounded-xl transition-all bg-blue-500 text-white shadow-blue-700/50",
+          isRugged
+            ? "border-b-4 border-blue-700 active:border-b-0"
+            : "shadow-lg bg-linear-to-r from-blue-500 to-indigo-500"
+        )}
+      >
+        GO
+      </button>
+      <button
+        onClick={onPass}
+        className={cn(
+          "h-16 col-span-3 text-sm font-bold tracking-widest uppercase rounded-xl transition-all opacity-70 hover:opacity-100",
+          uiMode === "LUXURY"
+            ? "text-white/60 hover:bg-white/10"
+            : "text-gray-500 hover:bg-gray-200"
+        )}
+      >
+        PASS (-0.5s)
+      </button>
+    </div>
+  );
+};
+--- src/components/ui/NumberPanel.tsx ---
+import React from "react";
+import { cn } from "@/lib/utils";
+import { UIMode } from "@/types";
+
+interface NumberPanelProps {
+  a: number;
+  b: number;
+  uiMode: UIMode;
+}
+
+export const NumberPanel: React.FC<NumberPanelProps> = ({ a, b, uiMode }) => {
+  const isRugged = uiMode === "RUGGED";
+
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-4 sm:gap-8 mb-8 transition-all",
+        isRugged
+          ? "border-4 border-black p-8 bg-white"
+          : "bg-white/10 backdrop-blur-xl border border-white/20 p-8 rounded-3xl shadow-2xl"
+      )}
+    >
+      <div className="text-6xl sm:text-7xl font-black tracking-tighter">
+        {a}
+      </div>
+      <div
+        className={cn(
+          "text-4xl opacity-30 font-light",
+          !isRugged && "animate-pulse"
+        )}
+      >
+        —
+      </div>
+      <div className="text-6xl sm:text-7xl font-black tracking-tighter">
+        {b}
+      </div>
+    </div>
+  );
+};
+--- src/app/page.tsx ---
+"use client";
+
+import React, { useState } from "react";
+import { GameConfig } from "@/types";
+import { useGameEngine } from "@/hooks/useGameEngine";
+import { HomeScreen } from "@/components/screens/HomeScreen";
+import { GameScreen } from "@/components/screens/GameScreen";
+import { ResultScreen } from "@/components/screens/ResultScreen";
+
+export default function BetweenApp() {
+  const [config, setConfig] = useState<GameConfig>({
+    difficulty: "NORMAL",
+    uiMode: "RUGGED",
+    inputMode: "KEYPAD",
+    isSoundEnabled: true,
+  });
+
+  const {
+    gameState,
+    feedback,
+    initGame,
+    exitGame,
+    handleAnswer,
+    handlePass,
+    setDifficulty,
+  } = useGameEngine(config.isSoundEnabled, config.uiMode);
+
+  // Difficulty sync: 設定画面での変更をフックに伝える
+  React.useEffect(() => {
+    setDifficulty(config.difficulty);
+  }, [config.difficulty, setDifficulty]);
+
+  // 1. Home Screen
+  if (!gameState.isPlaying && !gameState.isGameOver) {
+    return (
+      <HomeScreen
+        config={config}
+        setConfig={setConfig}
+        highScore={gameState.highScore}
+        onStart={() => initGame()}
+      />
+    );
+  }
+
+  // 2. Result Screen
+  if (gameState.isGameOver) {
+    return (
+      <ResultScreen
+        gameState={gameState}
+        uiMode={config.uiMode}
+        onRetry={() => initGame()}
+        onHome={exitGame}
+      />
+    );
+  }
+
+  // 3. Game Screen
+  return (
+    <GameScreen
+      config={config}
+      gameState={gameState}
+      feedback={feedback}
+      onAnswer={handleAnswer}
+      onPass={handlePass}
+      onAbort={exitGame}
+    />
+  );
+}
+--- src/app/layout.tsx ---
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        {children}
+      </body>
+    </html>
+  );
+}
+--- src/app/globals.css ---
+@import "tailwindcss";
+
+@theme {
+  /* ここでフォントやカスタム設定を行います */
+  --font-sans: var(--font-noto-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* その他のグローバルスタイル */
+body {
+  background: black;
+}--- src/lib/gameLogic.ts ---
+import { Difficulty, Problem } from '@/types';
+
+export const generateProblem = (diff: Difficulty): Problem => {
+  let a = 0, gap = 0;
+
+  switch (diff) {
+    case 'EASY': // 隣り合わせ (例: 13-15)
+      a = Math.floor(Math.random() * 80) + 10; // 10-90
+      gap = 2;
+      break;
+    case 'NORMAL': // 差: 2-10, 2桁 (10-99)
+      a = Math.floor(Math.random() * 80) + 10;
+      gap = (Math.floor(Math.random() * 5) + 1) * 2; // 2,4,6,8,10
+      break;
+    case 'HARD': // 差: 2-200, 最大4桁
+      a = Math.floor(Math.random() * 9000) + 100;
+      gap = (Math.floor(Math.random() * 100) + 1) * 2; // 2-200 (偶数)
+      break;
+  }
+  
+  return { a, b: a + gap };
+};
+
+export const calculateCorrectAnswer = (a: number, b: number): number => {
+  return (a + b) / 2;
+};--- src/lib/utils.ts ---
+// クラス名の結合ユーティリティ（clsx + tailwind-mergeの簡易版）
+export const cn = (...classes: (string | undefined | null | false)[]) => {
+  return classes.filter(Boolean).join(" ");
+};
+
+// 漢数字・全角数字・ひらがな読みを半角数字に変換するパーサー
+export const parseVoiceInput = (text: string): number | 'PASS' | null => {
+  if (!text) return null;
+
+  let str = text.trim();
+
+  // 1. パスワード検知
+  if (/パス|スキップ|次|next|skip/gi.test(str)) {
+    return 'PASS';
+  }
+
+  // 2. 漢数字の単純置換
+  const kanjiMap: { [key: string]: number } = {
+    '〇':0, '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9,
+    '０':0, '１':1, '２':2, '３':3, '４':4, '５':5, '６':6, '７':7, '８':8, '９':9
+  };
+
+  str = str.split('').map(char => kanjiMap[char] !== undefined ? kanjiMap[char] : char).join('');
+
+  // 3. 数字以外を削除
+  str = str.replace(/[^0-9]/g, "");
+
+  if (str === "") return null;
+  
+  const num = parseInt(str, 10);
+  return isNaN(num) ? null : num;
+};--- src/lib/storage.ts ---
+const HIGHSCORE_KEY = 'between_highscore';
+
+export const getHighScore = (): number => {
+  if (typeof window === 'undefined') return 0;
+  const saved = localStorage.getItem(HIGHSCORE_KEY);
+  return saved ? parseInt(saved, 10) : 0;
+};
+
+export const saveHighScore = (score: number): void => {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(HIGHSCORE_KEY, score.toString());
+};--- src/hooks/useVoiceInput.ts ---
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { parseVoiceInput } from '@/lib/utils';
+
+interface UseVoiceInputReturn {
+  isListening: boolean;
+  start: () => void;
+  stop: () => void;
+  isSupported: boolean;
+}
+
+export const useVoiceInput = (
+  isEnabled: boolean,
+  onResult: (val: number | 'PASS') => void
+): UseVoiceInputReturn => {
+  const [isListening, setIsListening] = useState(false);
+  const [isSupported, setIsSupported] = useState(true);
+  const recognitionRef = useRef<any>(null);
+  const onResultRef = useRef(onResult);
+
+  useEffect(() => {
+    onResultRef.current = onResult;
+  }, [onResult]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    // @ts-ignore
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setIsSupported(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = 'ja-JP';
+
+    recognition.onresult = (event: any) => {
+      const lastResult = event.results[event.results.length - 1];
+      if (lastResult.isFinal) {
+        const transcript = lastResult[0].transcript;
+        const parsed = parseVoiceInput(transcript);
+        
+        if (parsed !== null) {
+          onResultRef.current(parsed);
+        }
+      }
+    };
+
+    recognition.onend = () => {
+      if (isEnabled && recognitionRef.current) {
+        try { 
+          recognitionRef.current.start(); 
+        } catch (e) { 
+          // 既に開始されている場合の対策
+        }
+      } else {
+        setIsListening(false);
+      }
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      if (recognitionRef.current) recognitionRef.current.stop();
+    };
+  }, [isEnabled]); // isEnabledの変更で再初期化はしないが、onEndの挙動に影響
+
+  const start = useCallback(() => {
+    if (!recognitionRef.current) return;
+    try {
+      recognitionRef.current.start();
+      setIsListening(true);
+    } catch(e) { /* ignore */ }
+  }, []);
+
+  const stop = useCallback(() => {
+    if (!recognitionRef.current) return;
+    recognitionRef.current.stop();
+    setIsListening(false);
+  }, []);
+
+  return { isListening, start, stop, isSupported };
+};--- src/hooks/useGameEngine.ts ---
+import { useState, useEffect, useCallback } from 'react';
+import { GameState, Difficulty, FeedbackState } from '@/types';
+import { generateProblem, calculateCorrectAnswer } from '@/lib/gameLogic';
+import { getHighScore, saveHighScore } from '@/lib/storage';
+
+const GAME_DURATION = 60;
+
+export const useGameEngine = (soundEnabled: boolean, uiMode: 'RUGGED' | 'LUXURY') => {
+  const [gameState, setGameState] = useState<GameState>({
+    targetA: 0,
+    targetB: 0,
+    score: 0,
+    highScore: 0,
+    timeLeft: GAME_DURATION,
+    isPlaying: false,
+    isGameOver: false,
+    difficulty: 'NORMAL',
+    penaltyLockedUntil: 0
+  });
+
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+
+  // Load High Score
+  useEffect(() => {
+    setGameState(prev => ({ ...prev, highScore: getHighScore() }));
+  }, []);
+
+  // Update High Score
+  useEffect(() => {
+    if (gameState.score > gameState.highScore) {
+      saveHighScore(gameState.score);
+      setGameState(prev => ({ ...prev, highScore: prev.score }));
+    }
+  }, [gameState.score, gameState.highScore]);
+
+  // Timer
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (gameState.isPlaying && gameState.timeLeft > 0) {
+      timer = setInterval(() => {
+        setGameState(prev => {
+          if (prev.timeLeft <= 1) {
+            return { ...prev, timeLeft: 0, isPlaying: false, isGameOver: true };
+          }
+          return { ...prev, timeLeft: prev.timeLeft - 1 };
+        });
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [gameState.isPlaying, gameState.timeLeft]);
+
+  const initGame = useCallback((diff?: Difficulty) => {
+    const d = diff || gameState.difficulty;
+    const prob = generateProblem(d);
+    setGameState(prev => ({
+      ...prev,
+      targetA: prob.a,
+      targetB: prob.b,
+      score: 0,
+      timeLeft: GAME_DURATION,
+      isPlaying: true,
+      isGameOver: false,
+      difficulty: d,
+      penaltyLockedUntil: 0
+    }));
+    setFeedback(null);
+  }, [gameState.difficulty]);
+
+  const handleAnswer = useCallback((ans: number) => {
+    if (Date.now() < gameState.penaltyLockedUntil) return;
+
+    const correct = calculateCorrectAnswer(gameState.targetA, gameState.targetB);
+    
+    if (ans === correct) {
+      // Correct
+      const nextProb = generateProblem(gameState.difficulty);
+      setGameState(prev => ({
+        ...prev,
+        score: prev.score + 1,
+        targetA: nextProb.a,
+        targetB: nextProb.b
+      }));
+      setFeedback({ type: 'ok', msg: `${ans}` });
+      setTimeout(() => setFeedback(null), 500);
+    } else {
+      // Wrong
+      setGameState(prev => ({
+        ...prev,
+        penaltyLockedUntil: Date.now() + 500
+      }));
+      setFeedback({ type: 'ng', msg: 'LOCKED' });
+      setTimeout(() => setFeedback(null), 500);
+    }
+  }, [gameState.targetA, gameState.targetB, gameState.difficulty, gameState.penaltyLockedUntil]);
+
+  const handlePass = useCallback(() => {
+    const nextProb = generateProblem(gameState.difficulty);
+    setGameState(prev => ({
+      ...prev,
+      targetA: nextProb.a,
+      targetB: nextProb.b,
+      penaltyLockedUntil: Date.now() + 500
+    }));
+    setFeedback({ type: 'pass', msg: 'PASS' });
+    setTimeout(() => setFeedback(null), 500);
+  }, [gameState.difficulty]);
+
+  const exitGame = useCallback(() => {
+    setGameState(prev => ({ ...prev, isPlaying: false, isGameOver: false }));
+  }, []);
+
+  const setDifficulty = useCallback((diff: Difficulty) => {
+    setGameState(prev => ({ ...prev, difficulty: diff }));
+  }, []);
+
+  return {
+    gameState,
+    feedback,
+    initGame,
+    exitGame,
+    handleAnswer,
+    handlePass,
+    setDifficulty
+  };
+};--- src/types/index.ts ---
+export type Difficulty = 'EASY' | 'NORMAL' | 'HARD';
+export type UIMode = 'RUGGED' | 'LUXURY';
+export type InputMode = 'VOICE' | 'KEYPAD';
+
+export interface GameConfig {
+  difficulty: Difficulty;
+  uiMode: UIMode;
+  inputMode: InputMode;
+  isSoundEnabled: boolean;
+}
+
+export interface GameState {
+  targetA: number;
+  targetB: number;
+  score: number;
+  highScore: number;
+  timeLeft: number;
+  isPlaying: boolean;
+  isGameOver: boolean;
+  difficulty: Difficulty;
+  penaltyLockedUntil: number; // タイムスタンプ
+}
+
+export interface FeedbackState {
+  type: 'ok' | 'ng' | 'pass';
+  msg: string;
+}
+
+export interface Problem {
+  a: number;
+  b: number;
+}
