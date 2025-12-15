@@ -19,19 +19,20 @@ export default function BetweenApp() {
     gameState,
     feedback,
     initGame,
+    startGame, // 追加
     exitGame,
     handleAnswer,
     handlePass,
     setDifficulty,
   } = useGameEngine(config.isSoundEnabled, config.uiMode);
 
-  // Difficulty sync: 設定画面での変更をフックに伝える
+  // Difficulty sync
   React.useEffect(() => {
     setDifficulty(config.difficulty);
   }, [config.difficulty, setDifficulty]);
 
   // 1. Home Screen
-  if (!gameState.isPlaying && !gameState.isGameOver) {
+  if (gameState.status === "IDLE") {
     return (
       <HomeScreen
         config={config}
@@ -43,7 +44,7 @@ export default function BetweenApp() {
   }
 
   // 2. Result Screen
-  if (gameState.isGameOver) {
+  if (gameState.status === "GAMEOVER") {
     return (
       <ResultScreen
         gameState={gameState}
@@ -54,7 +55,7 @@ export default function BetweenApp() {
     );
   }
 
-  // 3. Game Screen
+  // 3. Game Screen (COUNTDOWN or PLAYING)
   return (
     <GameScreen
       config={config}
@@ -63,6 +64,7 @@ export default function BetweenApp() {
       onAnswer={handleAnswer}
       onPass={handlePass}
       onAbort={exitGame}
+      onStartGame={startGame} // カウントダウン終了時に呼ぶ関数
     />
   );
 }
